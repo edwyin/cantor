@@ -334,5 +334,20 @@
             </plugin>
         </plugins>
     </build>
+    <profiles>
+        <profile>
+            <id>dev</id>
+            <properties>
+                <!-- Skip artifact signing in local dev builds -->
+                <gpg.skip>true</gpg.skip>
+                <!-- Skip javadocs generation (problematic with generated sources on JDK 17) -->
+                <maven.javadoc.skip>true</maven.javadoc.skip>
+                <!-- Use a modern compiler plugin compatible with JDK 17 -->
+                <mvn.plugins.compiler.version>3.11.0</mvn.plugins.compiler.version>
+                <!-- Skip running tests (avoids MySQL-dependent tests locally) -->
+                <skipTests>true</skipTests>
+            </properties>
+        </profile>
+    </profiles>
 </project>
 
