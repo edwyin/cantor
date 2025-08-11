@@ -15,6 +15,7 @@ theme:
 nav:
   - "Introduction": "index.md"
   - "Overview":
+    - "Architecture": "overview.md"
     - "Motivations": "motivations.md"
     - "Components": "components.md"
     - "Namespaces": "namespaces.md"
