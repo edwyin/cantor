@@ -29,7 +29,7 @@ install() {
 
 install_skip_tests() {
     echo "*** running maven clean/install..."
-    mvn clean install -DskipTests
+    mvn -Pdev clean install -DskipTests
 }
 
 run_jar() {
