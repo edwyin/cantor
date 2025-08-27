@@ -16,6 +16,7 @@ nav:
   - "Introduction": "index.md"
   - "Overview":
     - "Architecture": "overview.md"
+    - "Module dependencies": "module-deps.md"
     - "Motivations": "motivations.md"
     - "Components": "components.md"
     - "Namespaces": "namespaces.md"
