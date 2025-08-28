@@ -3,7 +3,7 @@
 Below is a high-level view of Cantor’s components and how they interact.
 
 ```mermaid
-flowchart TD
+flowchart LR
   A["Client Apps"] --> B["cantor-grpc-client\n(CantorOnGrpc)"]
   A --> C["cantor-http-server\n(Jersey)"]
   B --> D["Network (gRPC)"]
