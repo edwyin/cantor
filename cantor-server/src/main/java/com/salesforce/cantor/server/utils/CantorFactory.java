@@ -7,11 +7,7 @@
 
 package com.salesforce.cantor.server.utils;
 
-import com.amazonaws.ClientConfiguration;
-import com.amazonaws.Protocol;
-import com.amazonaws.client.builder.AwsClientBuilder;
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3ClientBuilder;
+import com.salesforce.multicloudj.blob.client.BucketClient;
 import com.google.common.base.Strings;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.salesforce.cantor.Cantor;
@@ -27,6 +23,7 @@ import com.salesforce.cantor.mysql.CantorOnMysql;
 import com.salesforce.cantor.mysql.MysqlDataSourceProperties;
 import com.salesforce.cantor.mysql.MysqlDataSourceProvider;
 import com.salesforce.cantor.s3.CantorOnS3;
+import java.net.URI;
 import com.salesforce.cantor.server.CantorEnvironment;
 import com.typesafe.config.Config;
 import org.slf4j.Logger;
@@ -82,7 +79,8 @@ public class CantorFactory {
 
             // no support for s3 on sets therefore another cantor type must be used
             final Sets sets = getCantorByType(config.getString(CANTOR_S3_SETS_TYPE)).sets();
-            return new LoggableCantor(new CantorOnS3(createAwsClient(config), bucketName) {
+            final BucketClient bucketClient = createBucketClient(config, bucketName);
+            return new LoggableCantor(new CantorOnS3(bucketClient) {
                 @Override
                 public Sets sets() {
                     return sets;
@@ -184,33 +182,28 @@ public class CantorFactory {
         return propertiesList;
     }
 
-    private AmazonS3 createAwsClient(final Config config) {
+    private BucketClient createBucketClient(final Config config, final String bucketName) {
         final String region = config.getString(CANTOR_S3_BUCKET_REGION);
-        final AmazonS3ClientBuilder amazonS3ClientBuilder = AmazonS3ClientBuilder.standard();
-
-        final ClientConfiguration clientConfiguration = new ClientConfiguration();
-        clientConfiguration.withProtocol(Protocol.HTTPS)
-            .withMaxConnections(256)
-            .withConnectionMaxIdleMillis(TimeUnit.MINUTES.toMillis(5)) // keep connections alive for 5 minutes
-            .withConnectionTimeout(3_000) // timeout on connect after 3 seconds
-            .withRequestTimeout(10_000) // timeout out the request after 10 seconds
-            .withMaxErrorRetry(3); // on errors, retry max of 3 times
+        
+        final BucketClient.BlobBuilder builder = BucketClient.builder("aws")
+                .withBucket(bucketName)
+                .withRegion(region)
+                .withMaxConnections(256)
+                .withSocketTimeout(java.time.Duration.ofSeconds(10))
+                .withIdleConnectionTimeout(java.time.Duration.ofMinutes(5));
 
         final boolean endpointOverride = config.hasPath(CANTOR_S3_ENDPOINT_OVERRIDE) && config.getBoolean(CANTOR_S3_ENDPOINT_OVERRIDE);
         if (endpointOverride) {
-            amazonS3ClientBuilder.withEndpointConfiguration(new AwsClientBuilder.EndpointConfiguration(String.format("%s-fips", region), region));
-        } else {
-            amazonS3ClientBuilder.withRegion(region);
+            builder.withEndpoint(URI.create(String.format("https://s3-%s-fips.amazonaws.com", region)));
         }
 
         final String proxyHost = config.hasPath(CANTOR_S3_PROXY_HOST) ? config.getString(CANTOR_S3_PROXY_HOST) : "";
         final int proxyPort = config.hasPath(CANTOR_S3_PROXY_PORT) ? config.getInt(CANTOR_S3_PROXY_PORT) : -1;
         if (!Strings.isNullOrEmpty(proxyHost)) {
-            clientConfiguration.setProxyHost(proxyHost);
-            clientConfiguration.setProxyPort(proxyPort);
+            builder.withProxyEndpoint(URI.create(String.format("http://%s:%d", proxyHost, proxyPort)));
         }
 
-        return amazonS3ClientBuilder.withClientConfiguration(clientConfiguration).build();
+        return builder.build();
     }
 
     private ExecutorService newExecutorService() {

@@ -7,7 +7,7 @@
 
 package com.salesforce.cantor.s3;
 
-import com.amazonaws.services.s3.AmazonS3;
+import com.salesforce.multicloudj.blob.client.BucketClient;
 import com.salesforce.cantor.Cantor;
 import com.salesforce.cantor.Events;
 import com.salesforce.cantor.Objects;
@@ -22,9 +22,9 @@ public class CantorOnS3 implements Cantor {
     private final Objects objects;
     private final Events events;
 
-    public CantorOnS3(final AmazonS3 s3Client, final String bucketName) throws IOException {
-        this.objects = new ObjectsOnS3(s3Client, bucketName);
-        this.events = new EventsOnS3(s3Client, bucketName);
+    public CantorOnS3(final BucketClient bucketClient) throws IOException {
+        this.objects = new ObjectsOnS3(bucketClient);
+        this.events = new EventsOnS3(bucketClient);
     }
 
     @Override
