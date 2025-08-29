@@ -1,17 +1,14 @@
 package com.salesforce.cantor.s3;
 
-import com.amazonaws.SdkClientException;
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.model.AmazonS3Exception;
-import com.amazonaws.services.s3.model.HeadBucketRequest;
-import com.amazonaws.services.s3.model.ObjectMetadata;
-import com.amazonaws.util.StringInputStream;
+import com.salesforce.multicloudj.blob.client.BucketClient;
+import com.salesforce.multicloudj.common.exceptions.SubstrateSdkException;
 import com.salesforce.cantor.Namespaceable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
+import java.util.Collections;
+import java.util.Map;
 
 import static com.salesforce.cantor.common.CommonPreconditions.*;
 
@@ -26,20 +23,19 @@ public abstract class AbstractBaseS3Namespaceable implements Namespaceable {
     protected static final String NAMESPACE_IDENTIFIER = ".namespace";
     private static final Logger logger = LoggerFactory.getLogger(AbstractBaseS3Namespaceable.class);
 
-    protected final AmazonS3 s3Client;
-    protected final String bucketName;
+    protected final BucketClient bucketClient;
 
-    public AbstractBaseS3Namespaceable(final AmazonS3 s3Client, final String bucketName, final String type) throws IOException {
-        checkArgument(s3Client != null, "null s3 client");
-        checkString(bucketName, "null/empty bucket name");
-        this.s3Client = s3Client;
-        this.bucketName = bucketName;
+    public AbstractBaseS3Namespaceable(final BucketClient bucketClient, final String type) throws IOException {
+        checkArgument(bucketClient != null, "null bucket client");
+        this.bucketClient = bucketClient;
         try {
-            // validate s3Client can connect; valid connection/credentials if exception isn't thrown
-            this.s3Client.headBucket(new HeadBucketRequest(this.bucketName));
-        } catch (final SdkClientException e) {
-            logger.warn("exception validating s3 client and bucket:", e);
-            throw new IOException("exception validating s3 client and bucket", e);
+            // validate bucketClient can connect by checking if bucket exists
+            // Note: Substrate SDK doesn't have a direct head bucket operation,
+            // but we can test connectivity by listing with empty prefix
+            this.bucketClient.list(com.salesforce.multicloudj.blob.driver.ListBlobsRequest.builder().build()).hasNext();
+        } catch (final SubstrateSdkException e) {
+            logger.warn("exception validating bucket client:", e);
+            throw new IOException("exception validating bucket client", e);
         }
     }
 
@@ -48,7 +44,7 @@ public abstract class AbstractBaseS3Namespaceable implements Namespaceable {
         checkCreate(namespace);
         try {
             doCreate(namespace);
-        } catch (final AmazonS3Exception e) {
+        } catch (final SubstrateSdkException e) {
             logger.warn("exception creating namespace: " + namespace, e);
             throw new IOException("exception creating namespace: " + namespace, e);
         }
@@ -59,7 +55,7 @@ public abstract class AbstractBaseS3Namespaceable implements Namespaceable {
         checkDrop(namespace);
         try {
             doDrop(namespace);
-        } catch (final AmazonS3Exception e) {
+        } catch (final SubstrateSdkException e) {
             logger.warn("exception dropping namespace: " + namespace, e);
             throw new IOException("exception dropping namespace: " + namespace, e);
         }
@@ -71,25 +67,24 @@ public abstract class AbstractBaseS3Namespaceable implements Namespaceable {
     protected abstract String getObjectKeyPrefix(final String namespace);
 
     private void doCreate(final String namespace) throws IOException {
-        logger.info("creating namespace: '{}'.'{}'", this.bucketName, namespace);
+        logger.info("creating namespace: '{}'.'{}'", this.bucketClient.getBucket(), namespace);
         final String markerKey = getObjectKeyPrefix(namespace) + "/" + NAMESPACE_IDENTIFIER;
-        if (S3Utils.doesObjectExist(this.s3Client, this.bucketName, markerKey)) {
-            logger.info("namespace already exists: '{}'.'{}'", namespace, this.bucketName);
+        if (S3Utils.doesObjectExist(this.bucketClient, markerKey)) {
+            logger.info("namespace already exists: '{}'.'{}'", namespace, this.bucketClient.getBucket());
             return;
         }
-        final InputStream csvForNamespaces = new StringInputStream("namespace=" + namespace);
-        final ObjectMetadata objectMetadata = new ObjectMetadata();
-        objectMetadata.setContentType("text/plain");
-        S3Utils.putObject(this.s3Client, this.bucketName, markerKey, csvForNamespaces, objectMetadata);
+        final InputStream csvForNamespaces = new ByteArrayInputStream(("namespace=" + namespace).getBytes());
+        final Map<String, String> metadata = Collections.singletonMap("Content-Type", "text/plain");
+        S3Utils.putObject(this.bucketClient, markerKey, csvForNamespaces, metadata);
     }
 
     private void doDrop(final String namespace) throws IOException {
-        logger.info("dropping namespace: '{}'.'{}'", this.bucketName, namespace);
+        logger.info("dropping namespace: '{}'.'{}'", this.bucketClient.getBucket(), namespace);
 
         // try to delete any data objects first in-case they are orphaned objects
         final String objectKeyPrefix = getObjectKeyPrefix(namespace);
-        logger.debug("deleting all objects with prefix '{}.{}'", this.bucketName, objectKeyPrefix);
-        S3Utils.deleteObjects(this.s3Client, this.bucketName, objectKeyPrefix);
+        logger.debug("deleting all objects with prefix '{}.{}'", this.bucketClient.getBucket(), objectKeyPrefix);
+        S3Utils.deleteObjects(this.bucketClient, objectKeyPrefix);
     }
 
     protected static String trim(final String namespace) {

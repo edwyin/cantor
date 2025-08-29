@@ -68,6 +68,12 @@
             <artifactId>cantor-s3</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!--SUBSTRATE SDK-->
+        <dependency>
+            <groupId>com.salesforce.multicloudj</groupId>
+            <artifactId>blob-client</artifactId>
+            <version>0.2.2</version>
+        </dependency>
         <!--CANTOR MISC-->
         <dependency>
             <groupId>com.salesforce.cantor</groupId>
